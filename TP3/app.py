@@ -7,6 +7,7 @@ units_per_req = 15 #Default 15.
 keeping_cost = 10 #Per unit, per week. Default 10
 request_cost = 200 #Default 200.
 oos_cost = 200 #Out of stock per unit. Default 50 
+days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 df_daily_demand = pd.DataFrame(data=[[0, 0.05],
                                     [1, 0.20],
@@ -33,14 +34,14 @@ def prob_to_intervals(prob_table):
         intervals_table.loc[len(intervals_table.index)] = interval_row
     return intervals_table
 
+advance_table = prob_to_intervals(df_request_advance)
+daily_demand_table = prob_to_intervals(df_daily_demand)
+
 def map_in_interval(value, table):
     row = table[(table['start'] <= value) & (table['end'] > value)]
     return row.iloc[0, 2]
 
-def montecarlo():
-    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    advance_table = prob_to_intervals(df_request_advance)
-    daily_demand_table = prob_to_intervals(df_daily_demand)
+def montecarloA():
     row = {'week': '-',
             'total days': 0,
             'day': '-',
@@ -54,7 +55,7 @@ def montecarlo():
             'out of stock cost': 0,
             'request cost': 0,
             'keeping cost': 0
-            }
+        }
 
     montecarlo_table = pd.DataFrame(data=[row])
     
@@ -72,8 +73,7 @@ def montecarlo():
                 row['delivery day'] = '-'
             row['total days'] += 1
             row['day'] = day
-            row['rnd1'] = round(np.
-                                random.uniform(high=0.99), 2)
+            row['rnd1'] = round(np.random.uniform(high=0.99), 2)
             row['article demand'] = map_in_interval(row['rnd1'], daily_demand_table)
             row['stock'] -= row['article demand']
             if(row['stock'] < 0):
@@ -94,7 +94,69 @@ def montecarlo():
             row['request cost'] = 0
             row['keeping cost'] = 0
 
-    montecarlo_table.to_csv("./TP3/montecarlo.csv")
+    montecarlo_table.to_csv("./TP3/montecarloA.csv")
+
+def montecarloB():
+    units_per_req = 15
+    weeks = 15
+    row = {'week': '-',
+            'total days': 0,
+            'day': '-',
+            'rnd1': '-',
+            'article demand': '-',
+            'stock': initial_stock, 
+            'request': '-',
+            'rnd2': '-',
+            'delivery advance': '-',
+            'delivery day': '-',
+            'out of stock cost': 0,
+            'request cost': 0,
+            'keeping cost': 0
+        }
+
+    montecarlo_table = pd.DataFrame(data=[row])
+    request_tmr = False
+    for week in range(weeks):
+        row['week'] = week+1
+        for day in days:
+            if(day == row['delivery day']):
+                row['stock'] += units_per_req
+                row['delivery day'] = '-'
+                request_incoming = False
+            row['total days'] += 1
+            row['day'] = day
+            row['rnd1'] = round(np.random.uniform(high=0.99), 2)
+            row['article demand'] = map_in_interval(row['rnd1'], daily_demand_table)
+            row['stock'] -= row['article demand']
+            if(row['stock'] < 0):
+                oos_quantity = np.abs(row['stock'])
+                row['stock'] = 0
+                row['out of stock cost'] = oos_quantity * oos_cost
+            else:
+                row['keeping cost'] = row['stock'] * keeping_cost
+            if(request_tmr):
+                row['request'] = True
+                request_tmr = False
+                row['rnd2'] = round(np.random.uniform(high=0.99), 2)
+                row['delivery advance'] = map_in_interval(row['rnd2'], advance_table)
+                req_day = days[int((days.index(day)+7-row['delivery advance'])%7)]
+                print(day, ' - ', row['delivery advance'], ' = ', req_day)
+                row['delivery day'] = req_day
+                row['request cost'] += request_cost
+            if(row['stock'] <= 5 and row['delivery day'] == '-'): request_tmr = True
+
+            montecarlo_table.loc[len(montecarlo_table.index)] = row
+            # Reset all data
+            row['rnd1'] = '-'
+            row['article demand'] = 0
+            row['rnd2'] = '-'
+            row['request'] = '-'
+            row['delivery advance'] = '-'
+            row['out of stock cost'] = 0
+            row['request cost'] = 0
+            row['keeping cost'] = 0
+
+    montecarlo_table.to_csv("./TP3/montecarloB.csv")
 
 if __name__ == '__main__':
-    montecarlo()
+    montecarloB()
