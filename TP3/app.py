@@ -122,7 +122,6 @@ def montecarloB():
             if(day == row['delivery day']):
                 row['stock'] += units_per_req
                 row['delivery day'] = '-'
-                request_incoming = False
             row['total days'] += 1
             row['day'] = day
             row['rnd1'] = round(np.random.uniform(high=0.99), 2)
@@ -139,9 +138,7 @@ def montecarloB():
                 request_tmr = False
                 row['rnd2'] = round(np.random.uniform(high=0.99), 2)
                 row['delivery advance'] = map_in_interval(row['rnd2'], advance_table)
-                req_day = days[int((days.index(day)+7-row['delivery advance'])%7)]
-                print(day, ' - ', row['delivery advance'], ' = ', req_day)
-                row['delivery day'] = req_day
+                row['delivery day'] = days[int((days.index(day)+7-row['delivery advance'])%7)]
                 row['request cost'] += request_cost
             if(row['stock'] <= 5 and row['delivery day'] == '-'): request_tmr = True
 
@@ -159,4 +156,10 @@ def montecarloB():
     montecarlo_table.to_csv("./TP3/montecarloB.csv")
 
 if __name__ == '__main__':
+    print('Generando el csv del punto A')
+    montecarloA()
+    print('Generado!')
+    print('Generando el csv del punto B')
     montecarloB()
+    print('Generado!')
+    print('Puedes ver los archivos generados en la carpeta del proyecto.')
