@@ -7,6 +7,7 @@ units_per_req = 15 #Default 15.
 keeping_cost = 10 #Per unit, per week. Default 10
 request_cost = 200 #Default 200.
 oos_cost = 200 #Out of stock per unit. Default 50 
+price = 100 #Price per unit. Default 100
 days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 df_daily_demand = pd.DataFrame(data=[[0, 0.05],
@@ -52,9 +53,11 @@ def montecarloA():
             'rnd2': '-',
             'delivery advance': '-',
             'delivery day': '-',
+            'gains': 0,
             'out of stock cost': 0,
             'request cost': 0,
-            'keeping cost': 0
+            'keeping cost': 0,
+            'total cost': 0
         }
 
     montecarlo_table = pd.DataFrame(data=[row])
@@ -77,12 +80,14 @@ def montecarloA():
             row['article demand'] = map_in_interval(row['rnd1'], daily_demand_table)
             row['stock'] -= row['article demand']
             if(row['stock'] < 0):
+                row['gains'] += (row['article demand'] + row['stock'])* price
                 oos_quantity = np.abs(row['stock'])
                 row['stock'] = 0
                 row['out of stock cost'] = oos_quantity * oos_cost
             else:
+                row['gains'] += row['article demand'] * price
                 row['keeping cost'] = row['stock'] * keeping_cost
-
+            row['total cost'] += row['out of stock cost'] + row['request cost'] + row['keeping cost']
             montecarlo_table.loc[len(montecarlo_table.index)] = row
             # Reset all data
             row['rnd1'] = '-'
@@ -111,7 +116,8 @@ def montecarloB():
             'delivery day': '-',
             'out of stock cost': 0,
             'request cost': 0,
-            'keeping cost': 0
+            'keeping cost': 0,
+            'total cost': 0
         }
 
     montecarlo_table = pd.DataFrame(data=[row])
@@ -141,6 +147,7 @@ def montecarloB():
                 row['delivery day'] = days[int((days.index(day)+7-row['delivery advance'])%7)]
                 row['request cost'] += request_cost
             if(row['stock'] <= 5 and row['delivery day'] == '-'): request_tmr = True
+            row['total cost'] += row['out of stock cost'] + row['request cost'] + row['keeping cost']
 
             montecarlo_table.loc[len(montecarlo_table.index)] = row
             # Reset all data
