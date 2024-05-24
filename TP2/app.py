@@ -66,10 +66,10 @@ def menu():
         else:
             params = {"mean": mean, "std": std}
         chisq_data, chisq_value, ks_data, ks_value = fit(distribution, nums, intervals, params)
-        print("Valor de chi cuadrado: ", chisq_value)
         print(chisq_data)
-        print("Valor de KS: ", ks_value)
+        print("Valor de chi cuadrado: ", chisq_value)
         print(ks_data)
+        print("Valor de KS: ", ks_value)
         # Clear variables so the loop can continue
         distribution = ""
         intervals = 0
