@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 from pprint import pprint
 from progressbar import ProgressBar
-from excel_manager import ExcelManager
+from excel_manager import *
+from runge_kutta import *
 
 
 class Client:
@@ -19,6 +20,9 @@ class Client:
 
     def __repr__(self):
         return f'Client: {self.service} - {self.status} - {self.node} - {self.arrival_time}'
+
+    def __str__(self):
+        return f'Client {self.id}: {self.service}[{self.node}] - {self.status} - {self.arrival_time}'
 
     @classmethod
     def get_id(cls):
@@ -72,14 +76,17 @@ def search_next_event(row, manage_survey=False):
                 next_event['node'] = i
     # Search for the next event in the survey
     if manage_survey and row['survey']['state'] == 'busy' and row['survey']['duration']['rel_time'] < next_event['time']:
-        next_event['type'] = 'survey'
+        next_event['type'] = 'end'
         next_event['name'] = 'survey'
         next_event['time'] = row['survey']['duration']['rel_time']
-    if row['light_shutdown']['start']['rel_time'] < next_event['time']:
+    if row['light_shutdown']['start']['rel_time'] != None and row['light_shutdown']['start']['rel_time'] < next_event['time']:
         next_event['type'] = 'start'
         next_event['name'] = 'light_shutdown'
         next_event['time'] = row['light_shutdown']['start']['rel_time']
-
+    if row['light_shutdown']['end']['rel_time'] != None and row['light_shutdown']['end']['rel_time'] < next_event['time']:
+        next_event['type'] = 'end'
+        next_event['name'] = 'light_shutdown'
+        next_event['time'] = row['light_shutdown']['end']['rel_time']
     return next_event
 
 
@@ -93,15 +100,20 @@ def event_handling(row, manage_survey=False):
     row['N'] += 1
     # Arrival event
     if (next_event['type'] == 'start'):
-        arrival_event(row, next_event['name'])
+        if (next_event['name'] == 'light_shutdown'):
+            start_light_shutdown_event(row)
+        else:
+            arrival_event(row, next_event['name'])
     # Ending event
     elif (next_event['type'] == 'end'):
-        ending_event(row, next_event['name'], next_event['node'])
-        # Survey event
-        survey_start_event(row, manage_survey)
-    elif (next_event['type'] == 'survey'):
-        survey_end_event(row)
-    return row
+        if (next_event['name'] == 'light_shutdown'):
+            end_light_shutdown_event(row)
+        elif (next_event['name'] == 'survey'):
+            survey_end_event(row)
+        else:
+            ending_event(row, next_event['name'], next_event['node'])
+            # Survey event
+            survey_start_event(row, manage_survey)
 
 
 def arrival_event(row, event_name):
@@ -243,11 +255,31 @@ def survey_end_event(row):
         client.survey(row['clock'])
 
 
-def shutdown_event(row):
-    row['light_shutdown']['duration'] = get_time(0, row['clock'])
-    # Add the value to the service with the shutdown 
+def end_light_shutdown_event(row):
+    generate_next_light_shutdown(row)
+    for s in services:
+        if (row['light_shutdown']['start']['service'] == s.name):
+            for i in range(s.nodes):
+                # Need to return previous state checking if there was an ending event
+                if (row['ending_events'][s.name]['services'][i] != None):
+                    row['service_states'][s.name][i]['state'] = 'busy'
+                else:
+                    row['service_states'][s.name][i]['state'] = 'free'
+            break
 
 
+def start_light_shutdown_event(row):
+    row['light_shutdown']['end']['x_value'] = runge_kutta(0, row['clock'])
+    row['light_shutdown']['end']['abs_time'] = row['light_shutdown']['end']['x_value'] * 0.5
+    row['light_shutdown']['end']['rel_time'] = row['light_shutdown']['end']['abs_time'] + row['clock']
+    # Search for the service and suspend it
+    for s in services:
+        if (row['light_shutdown']['start']['service'] == s.name):
+            for i in range(s.nodes):
+                if (row['service_states'][s.name][i]['state'] == 'busy'):
+                    row['ending_events'][s.name]['services'][i] += row['light_shutdown']['end']['rel_time']
+                row['service_states'][s.name][i]['state'] = 'suspended'
+            break
 
 
 def generate_next_light_shutdown(row):
@@ -256,14 +288,13 @@ def generate_next_light_shutdown(row):
     row['light_shutdown']['start']['RND'] = rnd
     if rnd < 0.20:
         row['light_shutdown']['start']['abs_time'] = 4 * base_time
-    elif rnd < 0.60: 
+    elif rnd < 0.60:
         row['light_shutdown']['start']['abs_time'] = 6 * base_time
     else:
         row['light_shutdown']['start']['abs_time'] = 8 * base_time
     row['light_shutdown']['start']['rel_time'] = row['light_shutdown']['start']['abs_time'] + row['clock']
     service = np.random.choice(services).name
     row['light_shutdown']['start']['service'] = service
-
 
 
 def init_emptycols():
@@ -281,12 +312,16 @@ def init_emptycols():
     }
     row['light_shutdown'] = {
         'start': {
-            'RND': 0,
-            'abs_time': 0,
-            'rel_time': 0,
+            'RND': None,
+            'abs_time': None,
+            'rel_time': None,
             'service': None
         },
-        'duration': 0
+        'end': {
+            'x_value': None,
+            'abs_time': None,
+            'rel_time': None
+        }
     }
     generate_next_light_shutdown(row)
     for service in services:
@@ -308,22 +343,22 @@ def init_emptycols():
 
 
 def simulate(n, save_from=-1):
-    # -1 if we don't want to save
-    if (save_from != -1):
-        em = ExcelManager('./TP5/simulation.xlsx')
     # Initialize the columns
     row = init_emptycols()
+    # -1 if we don't want to save
     if save_from != -1:
-        export_row(row, em)
+        simulationPrinter.add_header(row)
+        simulationPrinter.add_row(row)
     # Initialize the simulation
     bar = ProgressBar(n, 40)
     for i in range(1, n+1):
         # Event handling
         event_handling(row)
-        bar.display()
+        # bar.display()
+        print(row)
         # Save rows
         if (save_from != -1 and (save_from <= i <= save_from + amount_saved or i == n)):
-            export_row(row, em)
+            simulationPrinter.add_row(row)
     return row
 
 
@@ -394,10 +429,6 @@ def calculate_statistics(row):
                 relation_avg, 2), 'times')
         print('A total of', new_row['survey']
               ['total_answered_surveys'], 'surveys were answered.')
-
-
-def export_row(row, em):
-    em.add_row(row)
 
 
 def menu():
