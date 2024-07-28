@@ -1,6 +1,5 @@
 from values import *
 import numpy as np
-import pandas as pd
 from pprint import pprint
 from progressbar import ProgressBar
 from excel_manager import *
@@ -256,7 +255,6 @@ def survey_end_event(row):
 
 
 def end_light_shutdown_event(row):
-    generate_next_light_shutdown(row)
     for s in services:
         if (row['light_shutdown']['start']['service'] == s.name):
             for i in range(s.nodes):
@@ -266,10 +264,15 @@ def end_light_shutdown_event(row):
                 else:
                     row['service_states'][s.name][i]['state'] = 'free'
             break
+    generate_next_light_shutdown(row)
+    # Clear end values
+    for v in row['light_shutdown']['end']:
+        row['light_shutdown']['end'][v] = None
 
 
 def start_light_shutdown_event(row):
     row['light_shutdown']['end']['x_value'] = runge_kutta(0, row['clock'])
+    simulationPrinter.lock_rk = True
     row['light_shutdown']['end']['abs_time'] = row['light_shutdown']['end']['x_value'] * 0.5
     row['light_shutdown']['end']['rel_time'] = row['light_shutdown']['end']['abs_time'] + row['clock']
     # Search for the service and suspend it
@@ -280,6 +283,11 @@ def start_light_shutdown_event(row):
                     row['ending_events'][s.name]['services'][i] += row['light_shutdown']['end']['rel_time']
                 row['service_states'][s.name][i]['state'] = 'suspended'
             break
+    # Clear start values
+    for v in row['light_shutdown']['start']:
+        if v == 'service':
+            continue
+        row['light_shutdown']['start'][v] = None
 
 
 def generate_next_light_shutdown(row):
@@ -354,8 +362,7 @@ def simulate(n, save_from=-1):
     for i in range(1, n+1):
         # Event handling
         event_handling(row)
-        # bar.display()
-        print(row)
+        bar.display()
         # Save rows
         if (save_from != -1 and (save_from <= i <= save_from + amount_saved or i == n)):
             simulationPrinter.add_row(row)
@@ -452,7 +459,7 @@ def menu():
             calculate_statistics(last_simulation)
         elif (option == 3):
             modify_menu()
-        if (option not in range(0, 3)):
+        if (option not in range(0, 4)):
             print('Invalid option.')
 
 
